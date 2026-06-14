@@ -18,7 +18,8 @@ import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, dete
 import { getSettings, saveSettings, applySettings, openSettings, openHub, activeDifficulty } from "/settings.js";
 import { wireMuteBtn, toggleMuted } from "/mute-btn.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
-import { shareTargetUrl, masksToGiftPattern } from "/share-links.js";
+import { shareTargetUrl } from "/share-links.js";
+import { buildDailyShareLink } from "/daily-share-core.js";
 import { buildOwnerTape } from "/owner-tape.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
 import { mountArenaList, pickNextGame, renderYourTableRow } from "/arena-panel.js";
@@ -287,7 +288,7 @@ function renderHomeIdentity() {
       onPvP: () => enterNewRoom({ autoStart: false }),
       onArena: () => showArena(),
       onStats: () => navigate("/daily/" + todayUTC() + "/stats"),
-      onShareDaily: () => shareDailyResult(cbs.dailyResult),
+      onShareDaily: () => shareDailyResult(cbs.dailyResult, cbs.dailyResult?.date),
       onProfile: (name) => navigate("/@" + name),
       onWorld: (slug) => navigate("/w/" + slug),
       onBrowseWorlds: () => navigate("/worlds"),
@@ -371,7 +372,9 @@ function dailyResultFor(profile, date = todayUTC()) {
       if (Array.isArray(s.words) && s.words.length) words = s.words;
     }
   } catch { /* ignore */ }
-  return { won: g.result === "won", guesses: g.guesses, solveGrid: grid, solveWords: words };
+  // `date` rides along so a share from the recap pins the link to THIS day (frozen at
+  // render), not a fresh todayUTC() at click time — see buildDailyShareLink.
+  return { won: g.result === "won", guesses: g.guesses, solveGrid: grid, solveWords: words, date };
 }
 
 // "I solved it on my phone, why is this board blank?" — when the profile proves you
@@ -417,11 +420,7 @@ function maybeRecoverDailySolve(username, profile, cbs) {
 // /daily/og route renders it). Native sheet, else clipboard.
 // `date` pins the link to the day being shared (past-day pages); omitted → today.
 function shareDailyResult(result, date) {
-  const pattern = masksToGiftPattern(result?.masks);
-  const url = location.origin + "/daily/" + (date || todayUTC()) + (pattern ? `?g=${pattern}` : "");
-  const line = result && result.won
-    ? `I got this Wordul in ${result.guesses} — I dare you.`
-    : "This Wordul beat me — I dare you to avenge me.";
+  const { url, line } = buildDailyShareLink({ origin: location.origin, date: date || todayUTC(), result });
   if (typeof navigator.share === "function") {
     navigator.share({ title: "Wordul of the Day", text: line, url }).catch(() => {});
   } else if (navigator.clipboard?.writeText) {

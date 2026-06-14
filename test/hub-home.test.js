@@ -93,17 +93,21 @@ describe("hub home (redesign)", () => {
     expect(document.getElementById("dailyStatsLabel").textContent).toBe("1,248 played");
   });
 
-  it("after you've played today, shows the post-play recap — result + countdown + 'Today's stats', no play card or Share", () => {
+  it("after you've played today, shows the post-play recap — result + countdown + Share + 'Today's stats', no play card", () => {
     const cb = makeCallbacks({ dailyResult: { won: true, guesses: 4 } });
     renderHub({}, cb);
     expect(document.getElementById("dailyCard")).toBeNull();           // no replay surface
     expect(document.querySelector(".daily-done")).toBeTruthy();
     expect(document.querySelector(".daily-result-text").textContent).toMatch(/Solved in 4/);
     expect(document.getElementById("dailyCountdown")).toBeTruthy();
-
-    // Share is gone (no one-tap way to broadcast the answer).
-    expect(document.getElementById("dailyShare")).toBeNull();
     expect(document.getElementById("dailyStats")).toBeNull();
+
+    // ◆ Dare ◆ — the spoiler-safe recap share (dated link, never names the answer) routes
+    // through onShareDaily, which builds the frozen /daily/<date> link.
+    const dare = document.getElementById("dailyCardDare");
+    expect(dare).toBeTruthy();
+    dare.click();
+    expect(cb.onShareDaily).toHaveBeenCalledTimes(1);
 
     // The "see everyone" chevron replaces Stats — it routes through onStats.
     document.getElementById("dailySeeAll").click();

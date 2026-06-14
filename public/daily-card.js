@@ -276,8 +276,10 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
   if (result) {
     const seeAll = document.getElementById("dailySeeAll");
     if (seeAll && onStats) seeAll.addEventListener("click", () => onStats());
-    // ◆ Dare ◆ — spoiler-free invite/share of today's word, same as the finish screen
-    // (onShareDaily → shareDailyResult). The masked-board gift never reveals the answer.
+    // ◆ Dare ◆ — spoiler-free invite/share of today's word, same as the finish screen.
+    // onShareDaily → shareDailyResult builds a FROZEN dated /daily/<this-day> link (never
+    // today-at-click) + a colors-only ?g= board, so a friend who opens it after the UTC
+    // rollover still lands on the same puzzle and the answer word never leaks.
     const dare = document.getElementById("dailyCardDare");
     if (dare && onShareDaily) dare.addEventListener("click", (e) => { e.stopPropagation(); onShareDaily(); });
     startCountdown();

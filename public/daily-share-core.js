@@ -6,6 +6,8 @@
 // spoiler-safe: only the solver's own browser holds the grid and the answer.
 
 // "g"/"y"/"x" color-letters → the hot/warm/cold masks share-card.js draws.
+import { masksToGiftPattern } from "/share-links.js";
+
 const CELL = { g: "hot", y: "warm", x: "cold" };
 export function decodeGridToMasks(grid) {
   return (grid ?? []).map((row) => [...String(row)].map((ch) => CELL[ch] ?? "cold"));
@@ -42,4 +44,23 @@ export function dailyShareModel({ pageWord, raw }) {
   const max = maxRowsFor(cols);
   const guesses = Number.isInteger(solve.guesses) ? solve.guesses : masks.length;
   return { won: solve.won === true, score: `${guesses}/${max}`, masks, cols };
+}
+
+// The daily share link + brag line, PINNED to the exact day being shared. `date` is the
+// puzzle's own date (the day you solved / the carousel's viewed day) — never "today" —
+// so a friend who opens it after the UTC rollover, or from another timezone, still lands
+// on the SAME puzzle. (The bug this fixes: a date-less link resolves to the opener's own
+// "today", handing them a different word.) The optional ?g=<colors> pattern — from the
+// run's masks, or decoded from a g/y/x solveGrid — makes the OG unfurl show the board with
+// letters hidden, so the link stays spoiler-free by construction.
+export function buildDailyShareLink({ origin, date, result }) {
+  const masks = result && Array.isArray(result.masks)
+    ? result.masks
+    : (result && result.solveGrid ? decodeGridToMasks(result.solveGrid) : null);
+  const pattern = masksToGiftPattern(masks);
+  const url = `${origin}/daily/${date}${pattern ? `?g=${pattern}` : ""}`;
+  const line = result && result.won
+    ? `I got this Wordul in ${result.guesses} — I dare you.`
+    : "This Wordul beat me — I dare you to avenge me.";
+  return { url, line };
 }

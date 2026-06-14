@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decodeGridToMasks, dailyAnswerOf, dailyShareModel } from "/daily-share-core.js";
+import { decodeGridToMasks, dailyAnswerOf, dailyShareModel, buildDailyShareLink } from "/daily-share-core.js";
 
 // The wr.dailySolve:<date> payload shape, written by daily-recover.js encodeLocalSolve:
 //   { won, guesses, words: ["SLATE","CRANE"], grid: ["xxxyx","ggggg"] }
@@ -75,5 +75,45 @@ describe("dailyShareModel", () => {
     expect(dailyShareModel({ pageWord: "crane", raw: "" })).toBeNull();
     expect(dailyShareModel({ pageWord: "crane", raw: "{not json" })).toBeNull();
     expect(dailyShareModel({ pageWord: "crane", raw: "{}" })).toBeNull();
+  });
+});
+
+describe("buildDailyShareLink", () => {
+  const O = "https://wordul.com";
+
+  it("pins the URL to the GIVEN day, never today (the whole bug)", () => {
+    // Sender solved 2026-06-09; this must NOT become a friend's own todayUTC().
+    const { url } = buildDailyShareLink({ origin: O, date: "2026-06-09", result: { won: true, guesses: 4 } });
+    expect(url.startsWith("https://wordul.com/daily/2026-06-09")).toBe(true);
+  });
+
+  it("appends a colors-only ?g= board decoded from a g/y/x solveGrid", () => {
+    const { url } = buildDailyShareLink({
+      origin: O, date: "2026-06-09",
+      result: { won: true, guesses: 2, solveGrid: ["yxxxx", "ggggg"] },
+    });
+    expect(url).toBe("https://wordul.com/daily/2026-06-09?g=wcccc-hhhhh");
+  });
+
+  it("uses result.masks directly when present (in-game Dare share path)", () => {
+    const { url } = buildDailyShareLink({
+      origin: O, date: "2026-06-09",
+      result: { won: true, guesses: 1, masks: [["hot", "hot", "hot", "hot", "hot"]] },
+    });
+    expect(url).toBe("https://wordul.com/daily/2026-06-09?g=hhhhh");
+  });
+
+  it("omits ?g= when there's no board to encode (non-5-wide or absent)", () => {
+    expect(buildDailyShareLink({ origin: O, date: "2026-06-09", result: { won: true, guesses: 3 } }).url)
+      .toBe("https://wordul.com/daily/2026-06-09");
+    expect(buildDailyShareLink({ origin: O, date: "2026-06-09", result: { won: true, guesses: 3, solveGrid: ["ggggggg"] } }).url)
+      .toBe("https://wordul.com/daily/2026-06-09");
+  });
+
+  it("brags spoiler-free: the line never contains the answer word", () => {
+    const win = buildDailyShareLink({ origin: O, date: "2026-06-09", result: { won: true, guesses: 4, solveGrid: ["xxxxx", "ggggg"] } });
+    expect(win.line).toBe("I got this Wordul in 4 — I dare you.");
+    const loss = buildDailyShareLink({ origin: O, date: "2026-06-09", result: { won: false, guesses: 6 } });
+    expect(loss.line).toBe("This Wordul beat me — I dare you to avenge me.");
   });
 });
