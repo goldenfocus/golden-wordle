@@ -6,7 +6,7 @@ import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, activeMistakeFx, isVoiceEnabled, setVoiceEnabled } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
-import { playVoice } from "/voice.js";
+import { playVoice, speakWordMeaning, speakMeaning } from "/voice.js";
 import { tapeStart, tapeRecord, tapeForUpload, tapeIsLive, tapeSuspend } from "/tape-recorder.js";
 import { loadVoiceConfig, setActiveVoiceId } from "/voice-config.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
@@ -1506,7 +1506,8 @@ function showCompanion(event, ctx = {}) {
   // opt into "split" (Yan's cloned frame + robot answer) via sound.voice.reveal.
   // Per-world dispatch: the descriptor (silent/ai/clips) comes from companionReact. text is
   // the already-rendered line (ai voice speaks it); raw + ctx feed the clip templating path.
-  playVoice(voice, raw, text, ctx, revealVoice);
+  // Returned so callers can sequence after the spoken reveal (e.g. appending the meaning).
+  return playVoice(voice, raw, text, ctx, revealVoice);
 }
 
 // The spoken WIN ANNOUNCEMENT — "Congratulations — you found the word [1s beat] TAFFY".
@@ -1526,7 +1527,7 @@ function speakWinReveal(answer) {
 // stacking over the curated card.
 function speakLossReveal(answer) {
   const { raw, speak, revealVoice, voice } = companionReact("loss", { answer });
-  if (speak && raw) playVoice(voice, raw, raw.replace("{answer}", answer), { answer }, revealVoice);
+  if (speak && raw) return playVoice(voice, raw, raw.replace("{answer}", answer), { answer }, revealVoice);
 }
 
 // THE single end-game announcer. Every finish — race, arena, duel, forfeit, daily —
@@ -1539,19 +1540,22 @@ function speakLossReveal(answer) {
 //   delayMs    — let the final row's flip land first (daily uses 1500ms)
 //   quip       — false = speech only, for screens with their own curated reveal (daily)
 function announceGameEnd({ won, answer, guessesUsed, delayMs = 0, quip = true }) {
+  // The short meaning rides along with the word — heard while it's seen, on win and loss.
+  const meaning = answer ? (wordIntel(answer)?.gloss || "") : "";
   const fire = () => {
     if (won) {
       playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]); // the race-win arpeggio
       if (quip) showCompanion("win", { guessesUsed }); // text-only quip (voice yields to the reveal)
-      speakWinReveal(answer);
+      speakWordMeaning(answer, meaning); // "FOCAL." [beat] "the center of attention."
     } else if (!answer) {
       // A forfeit announces BEFORE the server's reveal snapshot lands — with no answer
       // the reveal would speak a dangling "the word was…". Stay quiet; the end card
       // carries the word the moment the reveal snapshot arrives.
-    } else if (quip) {
-      showCompanion("loss", { answer }); // toast + spoken reveal in one
     } else {
-      speakLossReveal(answer);
+      // "the word was {answer}" reveal (toast+voice on a race, voice-only on the daily),
+      // then the meaning in the same voice — you hear what you missed.
+      const revealDone = quip ? showCompanion("loss", { answer }) : speakLossReveal(answer);
+      if (meaning) Promise.resolve(revealDone).then(() => speakMeaning(meaning)).catch(() => {});
     }
   };
   if (delayMs) setTimeout(fire, delayMs); else fire();

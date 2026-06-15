@@ -287,7 +287,20 @@ async function supernova(receipt, opts = {}) {
     heroExample.style.cssText = `font-family:'Fraunces',Georgia,serif; font-style:italic;
       font-size:clamp(16px,2.8vw,21px); color:#8a8a8f; margin:18px auto 0; max-width:22em; line-height:1.5;
       opacity:0; transform:translateY(12px); transition:.6s ease .12s;`;
-    heroEl.append(heroKicker, heroWord, heroMeta, heroRule, heroGloss, heroExample);
+    // Compact gold tally — lives INSIDE the hero so the reward lands on the same screen as
+    // the lesson (the coins rain behind via canvas; this is where they settle, ticking up).
+    const heroTally = document.createElement("div");
+    heroTally.style.cssText = `display:inline-flex; align-items:center; gap:10px; margin-top:26px;
+      opacity:0; transform:translateY(14px) scale(.92); transition:.5s cubic-bezier(.2,1.4,.4,1);`;
+    const heroTallyAmt = document.createElement("div");
+    heroTallyAmt.style.cssText = `font-family:'Fraunces',Georgia,serif; font-weight:900;
+      font-size:clamp(28px,5.5vw,46px); color:#f0c14b; font-variant-numeric:tabular-nums;
+      text-shadow:0 0 30px rgba(240,193,75,.55);`;
+    const heroTallyLbl = document.createElement("div");
+    heroTallyLbl.style.cssText = `font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+      color:#8a8a8f; text-align:left; line-height:1.4;`;
+    heroTally.append(heroTallyAmt, heroTallyLbl);
+    heroEl.append(heroKicker, heroWord, heroMeta, heroRule, heroGloss, heroExample, heroTally);
     overlay.appendChild(heroEl);
 
     document.body.appendChild(overlay);
@@ -588,8 +601,55 @@ async function supernova(receipt, opts = {}) {
         buildExample(heroExample, answerWord, exampleText);
         heroExample.style.opacity = "1"; heroExample.style.transform = "none";
       }
-      // hold the lesson
-      await Promise.race([sleep(glossText ? 2300 : 1400), skipRace]);
+      // brief settle so the meaning paints; the celebration owns the hold + the gold.
+      await Promise.race([sleep(220), skipRace]);
+    }
+
+    // ONE SCREEN: the word + meaning hold center while the gold rains behind them (canvas
+    // coins orbiting the nebula) and settles into the compact in-hero tally that ticks up.
+    // Comprehension and dopamine in a single beat — no second screen.
+    async function runLexiconCelebration() {
+      const c = orbitCenter();
+      const revealP = lexiconReveal();                 // word + meaning appear…
+      // …and the gold begins the instant the word has formed (concurrent, not after).
+      await Promise.race([sleep(120 + answerWord.length * 70 + 240), skipRace]);
+      const isWin = receipt.payout > 0;
+      if (!skipFired) {
+        const netSign = receipt.net >= 0 ? "+" : "−";
+        heroTallyAmt.textContent = `◆ ${isWin ? 0 : receipt.payout}`;
+        heroTallyAmt.style.color = isWin ? "#f0c14b" : "#e0796b";
+        const l1 = document.createTextNode(tFn("settle.toWallet", "to your wallet"));
+        const l2 = document.createTextNode(`${tFn("settle.net", "net")} ${netSign}${Math.abs(receipt.net)}`);
+        heroTallyLbl.append(l1, document.createElement("br"), l2);
+        heroTally.style.opacity = "1"; heroTally.style.transform = "none";
+
+        if (isWin) {
+          shake = 14; ringBurst("#f0c14b", 5);
+          playChime?.([[392, 0], [523, 0.12], [659, 0.26], [988, 0.4]]);
+          const n = Math.min(receipt.minted, 30); // thinned coin field — texture, not a storm
+          for (let i = 0; i < n; i++) {
+            if (!running || skipFired) break;
+            mkCoin(c.x, c.y, 1.4);
+            if (i % 3 === 0) ringBurst("#f0c14b", 1);
+            await Promise.race([sleep(26), skipRace]);
+          }
+          // payout figure + wallet HUD count up together
+          const payDur = 1100, t0 = performance.now();
+          (function f(now) {
+            if (!running) return;
+            const t = Math.min(1, (now - t0) / payDur);
+            heroTallyAmt.textContent = `◆ ${Math.round(receipt.payout * (1 - Math.pow(1 - t, 3)))}`;
+            if (t < 1) requestAnimationFrame(f);
+          })(t0);
+          countTo(walletBefore, finalWallet, payDur);
+          await Promise.race([sleep(payDur + 180), skipRace]);
+        } else {
+          onWalletTick?.(finalWallet); // payout ≤ 0: HUD already true, nothing to count
+        }
+      }
+      // hold so the lesson is read (and heard — the voice reads it concurrently)
+      await Promise.race([sleep(1600), skipRace]);
+      await revealP.catch(() => {});
     }
 
     function countTo(from, to, ms) {
@@ -644,16 +704,15 @@ async function supernova(receipt, opts = {}) {
     (async () => {
       const c = orbitCenter();
 
-      // ── Act 1: the word + its meaning (the lesson). Shows on win AND loss. ──
+      // ── The word + its meaning + the gold, all on ONE screen, all at once. ──
+      // The common path: a known answer (win OR loss) gets the lexicon celebration.
       if (answerWord && !skipFired) {
-        await lexiconReveal();
-        // Lift + fade the hero, freeing center stage for the demoted gold tail.
-        heroEl.style.opacity = "0";
-        heroEl.style.transform = "translateY(-58%) scale(.96)";
-        await Promise.race([sleep(420), skipRace]);
-        heroEl.style.display = "none";
+        await runLexiconCelebration();
+        teardown();
+        return;
       }
 
+      // ── Fallback (no answer word / bust with no word): the original gold beats. ──
       // Beat 1: mint — coins emerge, one per minted gold
       await caption([
         { text: `${receipt.points.toLocaleString("en-US")} pts`, color: "#9d8bff" },
