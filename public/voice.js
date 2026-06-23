@@ -91,21 +91,9 @@ export function speakRobotic(word) {
   try { window.speechSynthesis.speak(roboticUtterance(word)); } catch { /* ignore */ }
 }
 
-// The celebration's audio half: read the solved WORD, a dramatic beat, then its short
-// MEANING — both in the reveal voice, so what the eye reads the ear hears too (dual coding).
-// Mute-gated end to end; resolves when done (or on skip via mute). Used on a win where the
-// word leads with no frame ("FOCAL." … "the center of attention.").
-export async function speakWordMeaning(word, meaning, { pauseMs = 800 } = {}) {
-  if (isMuted()) return;
-  stopSpeaking(); // clear any prior reaction so the reveal owns the voice
-  await new Promise((r) => setTimeout(r, pauseMs)); // beat before the word
-  if (isMuted() || !word) return;
-  await sayRobotic(word);
-  await speakMeaning(meaning);
-}
-
-// Speak just the meaning, after a short beat — appended after an existing spoken reveal
-// (e.g. the loss "the word was {answer}" line) so the meaning lands in the same voice.
+// Speak just the MEANING, after a short beat — appended right after the spoken word reveal
+// (win: the framed "you found the word {answer}"; loss: "the word was {answer}") so the
+// meaning lands in the same voice (dual coding: what the eye reads, the ear hears too).
 export async function speakMeaning(meaning) {
   if (!meaning || isMuted()) return;
   await new Promise((r) => setTimeout(r, 350)); // beat between the word and its meaning

@@ -53,9 +53,6 @@ export const en = {
   "daily.boardTitle": "Wordul of the Day · {date}",
   "daily.roundScorePrefix": "Round",
   "race.scorePrefix": "Score",
-  "daily.cashoutScore": "Score → +{gold} gold",
-  "daily.cashoutDaily": "Daily bonus +{gold}",
-  "daily.cashoutSpeed": "Speed bonus +{gold}",
   // Gold ledger (public profile § — every mint on the record, drill into the parts)
   "gold.history.title": "Gold ledger",
   "gold.history.empty": "No gold earned yet — solve a daily.",

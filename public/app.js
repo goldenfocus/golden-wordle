@@ -6,7 +6,7 @@ import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, activeMistakeFx, isVoiceEnabled, setVoiceEnabled } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
-import { playVoice, speakWordMeaning, speakMeaning } from "/voice.js";
+import { playVoice, speakMeaning } from "/voice.js";
 import { tapeStart, tapeRecord, tapeForUpload, tapeIsLive, tapeSuspend } from "/tape-recorder.js";
 import { loadVoiceConfig, setActiveVoiceId } from "/voice-config.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
@@ -1519,7 +1519,8 @@ function showCompanion(event, ctx = {}) {
 function speakWinReveal(answer) {
   if (!answer) return;
   const { raw, speak, revealVoice, voice } = companionReact("winReveal", { answer });
-  if (speak && raw) playVoice(voice, raw, raw.includes("{answer}") ? raw.replace("{answer}", answer) : raw, { answer, pauseMs: 1000 }, revealVoice);
+  // Returned so the caller can sequence the meaning right after the framed word reveal.
+  if (speak && raw) return playVoice(voice, raw, raw.includes("{answer}") ? raw.replace("{answer}", answer) : raw, { answer, pauseMs: 1000 }, revealVoice);
 }
 
 // Speech-only twin of showCompanion("loss") for surfaces that own their screen (the
@@ -1546,7 +1547,10 @@ function announceGameEnd({ won, answer, guessesUsed, delayMs = 0, quip = true })
     if (won) {
       playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]); // the race-win arpeggio
       if (quip) showCompanion("win", { guessesUsed }); // text-only quip (voice yields to the reveal)
-      speakWordMeaning(answer, meaning); // "FOCAL." [beat] "the center of attention."
+      // Framed lead-in FIRST (the winReveal bank's encouragement + "the word is {answer}",
+      // warm cloned voice in split editions), THEN the meaning right after — same voice.
+      const revealDone = speakWinReveal(answer);
+      if (meaning) Promise.resolve(revealDone).then(() => speakMeaning(meaning)).catch(() => {});
     } else if (!answer) {
       // A forfeit announces BEFORE the server's reveal snapshot lands — with no answer
       // the reveal would speak a dangling "the word was…". Stay quiet; the end card
@@ -2495,7 +2499,9 @@ function onServerMessage(msg) {
       // announced the loss — without it a give-up would speak the reveal twice.
       if (!game.hasShownEndStats) {
         const answer = msg.room.word || (personallyWon ? me.guesses[me.guesses.length - 1]?.word : null); // a win's last guess IS the word
-        announceGameEnd({ won: personallyWon, answer, guessesUsed: me.guesses.length, delayMs: 1500, quip: false });
+        // delayMs 2200: let the settlement's points/gold animation land first, so the framed
+        // spoken reveal ("…the word is {answer}" + meaning) trails it rather than talking over it.
+        announceGameEnd({ won: personallyWon, answer, guessesUsed: me.guesses.length, delayMs: 2200, quip: false });
       }
     }
     // …FIRE once the mint confirms. The arm/fire split matters twice over: a reloaded
@@ -2842,26 +2848,17 @@ function maybeRunSettlement(msg) {
 // §B CASH-OUT — the honest, ONLY-UP gold reveal at the end of a daily. During play the
 // sacred ◆ wallet never moved (discoveries pumped the ephemeral #roundScore instead); the
 // server minted the real gold once, server-authoritatively. So at finish we count the ◆ HUD
-// UP from its pre-mint value to pre-mint + mint, fly coins onto the pile, and lay out an
-// honest breakdown. The displayed mint is the SERVER's confirmed me.goldAwarded — never
-// fabricated. Idempotent per solve (guarded by game.cashedOut).
-//
-// Breakdown honesty: the client knows the total (goldAwarded), the player's final daily
-// points (me.points, spend-excluded — see Layer 1), and the flat daily bonus constant.
-// scoreGold = round(points/DAILY_GOLD_RATE) mirrors the server's ÷9 goldFromPoints; the speed bonus is the
-// honest REMAINDER (mint − scoreGold − dailyBonus, floored at 0), so the three lines always
-// sum to the server total without re-deriving the wall-clock speed curve on the client.
-const DAILY_GOLD_BONUS = 100; // mirrors src/room.ts DAILY_GOLD_BONUS
-const DAILY_GOLD_RATE = 9;    // mirrors src/economy.ts DAILY_GOLD_RATE (daily mints at ÷9)
+// UP from its pre-mint value to pre-mint + mint, fly coins onto the pile. The displayed mint
+// is the SERVER's confirmed me.goldAwarded — never fabricated. Idempotent per solve
+// (guarded by game.cashedOut). The score/daily/speed breakdown is animated by the settlement
+// overlay (dailyReceiptLines) and recorded in the gold ledger — no longer duplicated on the
+// broadsheet card (slimmed 2026-06-23), so the card stays the word + the lasting actions.
+const DAILY_GOLD_BONUS = 100; // mirrors src/room.ts DAILY_GOLD_BONUS — feeds the overlay's daily line
 function cashOutDaily(me, answer = null) {
   if (game.cashedOut) return;
   game.cashedOut = true;
   const mint = (me && typeof me.goldAwarded === "number") ? Math.max(0, me.goldAwarded) : 0;
-  // Honest breakdown components (sum === mint).
-  const scoreGold = Math.max(0, Math.round((me?.points || 0) / DAILY_GOLD_RATE));
-  const dailyBonus = mint > 0 ? DAILY_GOLD_BONUS : 0;
-  const speedGold = Math.max(0, mint - scoreGold - dailyBonus);
-  renderCashoutBreakdown({ scoreGold, dailyBonus, speedGold });
+  const dailyBonus = mint > 0 ? DAILY_GOLD_BONUS : 0; // the overlay's dailyReceiptLines splits the rest
   const reducedMotion = getSettings().reducedMotion;
   // Reconcile from the server (source of truth), then run the ritual. The receipt
   // (server-confirmed, attached only after the mint ledger write) drives the same
@@ -2912,26 +2909,6 @@ function replayMyDailyBoard(me) {
   const board = $$(".player-board").find((b) => b.dataset.player === getUsername());
   const grid = board?.querySelector(".grid");
   if (grid) playBoardReplay(grid, me.guesses);
-}
-
-// Paint the §B cash-out breakdown list. Each line is one honest gold source; the list is
-// hidden when there's nothing to show (a 0-gold miss). Reuses the daily-cashout slot.
-function renderCashoutBreakdown({ scoreGold, dailyBonus, speedGold }) {
-  const el = $("#dailyCashout");
-  if (!el) return;
-  const rows = [];
-  if (scoreGold > 0) rows.push(t("daily.cashoutScore", { gold: scoreGold }));
-  if (dailyBonus > 0) rows.push(t("daily.cashoutDaily", { gold: dailyBonus }));
-  if (speedGold > 0) rows.push(t("daily.cashoutSpeed", { gold: speedGold }));
-  if (!rows.length) { el.hidden = true; el.textContent = ""; return; }
-  el.textContent = "";
-  for (const text of rows) {
-    const li = document.createElement("li");
-    li.className = "daily-cashout-row";
-    li.textContent = text;
-    el.appendChild(li);
-  }
-  el.hidden = false;
 }
 
 function renderGames(snap) {
