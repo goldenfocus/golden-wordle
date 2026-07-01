@@ -2,6 +2,28 @@
 
 **Date:** 2026-06-12 · **Status:** approved design · **Branch:** `live-page`
 
+## Reconciliation (2026-06-14) — Arena already shipped
+
+Since this spec was written, the **open-tables backend is already in production**:
+
+- `Room.publishArena()` / `closeArena()` (room.ts) register/deregister human-hosted
+  public rooms into the ARENA index; `Arena` DO has `POST /publish`, `POST /open`,
+  `POST /close`, `GET /open` + `prune()` (arena.ts, arena-core.ts). Human rooms opt in
+  via the `public: true` hello flag (`game.publicArena`), and `abandonAt` delists empty
+  lobbies. Bots and humans share one `OpenGame[]` feed.
+- Client: `mountArenaList()` (arena-panel.js) renders that feed; `/arena` is a real
+  refresh-survivable route (worker serves the SPA shell) rendered in-hub by `showArena()`;
+  home has a `#modeArena` door.
+
+**Consequence:** Section 2 ("extend Arena registry") is **done** — no backend work. The
+decision (2026-06-14) is to **evolve `/arena` into `/live`**: one destination carrying the
+existing open-tables list **plus** the new global chat. `/arena` redirects to `/live`; the
+home door is relabeled "Live". The genuinely net-new work is **Section 3 (global chat DO)**
+and the **page restructure** (Section 1/4) to host chat beside the tables.
+
+The `visibility: "unlisted"` field from the original Section 2 is **deferred to Increment
+2** (the existing `public` opt-in + `abandonAt` already cover "listed vs not" for now).
+
 ## Vision (two increments)
 
 A public "town square" page where visitors see live activity and players find each other.
