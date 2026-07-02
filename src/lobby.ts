@@ -40,6 +40,13 @@ export class Lobby extends DurableObject<Env> {
     this.broadcastOnline(ws);
   }
 
+  // An abnormal socket termination (a dropped mobile connection) fires this, not close —
+  // recompute presence the same way so the "N online" count can't drift upward. Mirrors
+  // Room's webSocketError → webSocketClose delegation.
+  async webSocketError(ws: WebSocket): Promise<void> {
+    this.broadcastOnline(ws);
+  }
+
   private async onChat(ws: WebSocket, textRaw: string): Promise<void> {
     const att = ws.deserializeAttachment() as { username?: string } | null;
     const username = att?.username ?? "";

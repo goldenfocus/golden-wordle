@@ -37,6 +37,7 @@ function makeLobby() {
   const lobby = new Lobby(ctx as never, {} as never) as unknown as {
     webSocketMessage: (ws: WebSocket, raw: string) => Promise<void>;
     webSocketClose: (ws: WebSocket) => Promise<void>;
+    webSocketError: (ws: WebSocket) => Promise<void>;
   };
   return { lobby, sockets };
 }
@@ -89,6 +90,14 @@ describe("Lobby chat", () => {
     const a = mockWs("alice"); const b = mockWs("bob");
     sockets.push(a, b);
     await lobby.webSocketClose(a);
+    expect((b as any)._sent).toContainEqual({ type: "online", n: 1 });
+  });
+
+  it("on error (abnormal drop), recomputes presence like close", async () => {
+    const { lobby, sockets } = makeLobby();
+    const a = mockWs("alice"); const b = mockWs("bob");
+    sockets.push(a, b);
+    await lobby.webSocketError(a);
     expect((b as any)._sent).toContainEqual({ type: "online", n: 1 });
   });
 });
