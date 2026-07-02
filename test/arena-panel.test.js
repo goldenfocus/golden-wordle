@@ -165,8 +165,8 @@ describe("count surfaces once per viewport (iter3 §1 review fixes)", () => {
     expect(app).toContain("#lobbyRailTitleCount");
     expect(html).toContain('id="lobbyRailTitleCount"');
   });
-  it("the standalone Arena title carries the open count (the in-list line is gone)", () => {
-    expect(app).toContain("arenaTitleCount");
+  it("the standalone Live title carries the open count (the in-list line is gone)", () => {
+    expect(app).toContain("liveTitleCount");
   });
   it("teardown AND the challenge path clear the pinned Your-table row (stale-row leak)", () => {
     // Both call renderYourTableRow(..., null): teardownLobbyRail on leaving the lobby

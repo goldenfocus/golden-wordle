@@ -23,6 +23,7 @@ import { buildDailyShareLink } from "/daily-share-core.js";
 import { buildOwnerTape } from "/owner-tape.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
 import { mountArenaList, pickNextGame, renderYourTableRow } from "/arena-panel.js";
+import { mountGlobalChat } from "/live.js";
 import { computeDailyStatsFromRoster, computeRosterView, buildDayShareLine } from "/daily-stats.js";
 import { rosterRow } from "/daily-card.js";
 import { mountDailyLeaderboard, wireReplayRows } from "/daily-lb.js";
@@ -126,7 +127,7 @@ function parseRoute() {
   const daily = location.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})$/);
   if (daily) return { kind: "daily", date: daily[1] };
   if (location.pathname === "/daily") return { kind: "daily", date: todayUTC() };
-  if (location.pathname === "/arena") return { kind: "arena" };
+  if (location.pathname === "/arena" || location.pathname === "/live") return { kind: "live" };
   if (location.pathname === "/feed") return { kind: "feed" };
   const feedPost = location.pathname.match(/^\/feed\/(\d{4}-\d{2}-\d{2})$/);
   if (feedPost) return { kind: "feed-post", date: feedPost[1] };
@@ -286,7 +287,7 @@ function renderHomeIdentity() {
       onPlay: (editionId, seed) => { pendingDailySeed = seed || null; bloomIntoDaily(editionId); },
       onSolo: () => enterNewRoom({ autoStart: true }),
       onPvP: () => enterNewRoom({ autoStart: false }),
-      onArena: () => showArena(),
+      onLive: () => showLive(),
       onStats: () => navigate("/daily/" + todayUTC() + "/stats"),
       onShareDaily: () => shareDailyResult(cbs.dailyResult, cbs.dailyResult?.date),
       onProfile: (name) => navigate("/@" + name),
@@ -1680,40 +1681,51 @@ function wireLobbyRailPill(el) {
 // opts in via "Host a public game"). Rendered into #hubContent (home stays mounted); Back
 // restores the launcher. Distinct from Head-to-head, which makes a private invite-link room.
 // Direct load / refresh of /arena: the Arena view lives inside the home hub (#hubContent),
-// so mount home first and let maybeOpenArena() open the Arena once the hub renders. The
+// so mount home first and let maybeOpenArena() open the view once the hub renders. The
 // pendingOpenArena one-shot is the same hook the "join next → none waiting" fallback uses.
-function showArenaRoute() {
+function showLiveRoute() {
   pendingOpenArena = true;
   leaveRoom();
   showHome();
 }
 
-function showArena() {
+let liveChatStop = null;
+
+function showLive() {
   const content = document.getElementById("hubContent");
   if (!content) return;
-  // The Arena is a real, refresh-survivable route — reflect it in the URL (replace, not push,
-  // so it doesn't pile a history entry on top of the hub the user is already standing on).
-  history.replaceState(null, "", "/arena");
+  // A real, refresh-survivable route — reflect it in the URL (replace, not push, so it
+  // doesn't pile a history entry on top of the hub the user is already standing on).
+  history.replaceState(null, "", "/live");
   stopArenaPoll();
+  if (liveChatStop) { liveChatStop(); liveChatStop = null; }
   content.innerHTML =
-    `<section class="hub-panel arena-view">
-      <button id="arenaBack" class="hub-textlink" type="button">← Back</button>
-      <h1 class="pvp-title">Arena <span id="arenaTitleCount" class="rail-title-count"></span></h1>
-      <p class="arena-blurb muted">Jump into an open game — beat a worduler or take on whoever's waiting.</p>
-      <div id="arenaList" class="arena-mount"></div>
-      <button id="arenaHost" class="btn block">Host a public game →</button>
+    `<section class="hub-panel live-view">
+      <button id="liveBack" class="hub-textlink" type="button">← Back</button>
+      <h1 class="pvp-title">Live <span id="liveTitleCount" class="rail-title-count"></span></h1>
+      <p class="live-blurb muted">Jump into an open game, or chat with whoever's around.</p>
+      <div class="live-grid">
+        <div class="live-tables">
+          <div id="arenaList" class="arena-mount"></div>
+          <button id="liveHost" class="btn block">Host a public game →</button>
+        </div>
+        <aside id="liveChat" class="live-chat"></aside>
+      </div>
     </section>`;
-  const back = document.getElementById("arenaBack");
+  const back = document.getElementById("liveBack");
   if (back) back.addEventListener("click", () => { stopArenaPoll(); navigate("/"); });
-  const host = document.getElementById("arenaHost");
+  const host = document.getElementById("liveHost");
   if (host) host.addEventListener("click", () => { stopArenaPoll(); enterNewRoom({ autoStart: false, publicArena: true }); });
   arenaPollStop = mountArenaList(document.getElementById("arenaList"), {
-    onJoin: (routePath) => { pendingArenaOrigin = true; navigate(routePath); }, // navigate() calls stopArenaPoll()
-    // The in-list "N open" line is gone (iter3 §1) — the Arena title carries the count.
+    onJoin: (routePath) => { pendingArenaOrigin = true; navigate(routePath); },
     onCount: (n) => {
-      const t = document.getElementById("arenaTitleCount");
+      const t = document.getElementById("liveTitleCount");
       if (t) t.textContent = railTitleCount(n);
     },
+  });
+  liveChatStop = mountGlobalChat(document.getElementById("liveChat"), {
+    username: getUsername(),
+    onNeedName: () => toast("Pick a name to chat", { duration: 1800 }),
   });
 }
 
@@ -1751,7 +1763,7 @@ function backToMenu() {
 function maybeOpenArena() {
   if (!pendingOpenArena) return;
   pendingOpenArena = false;
-  showArena();
+  showLive();
 }
 
 // Render a username as a clickable link to their public profile (/@username).
@@ -5503,7 +5515,7 @@ function renderCrumbs(r) {
     : r.kind === "daily" ? "Daily"
     : r.kind === "daily-stats" ? "Stats"
     : r.kind === "daily-archive" ? "Archive"
-    : r.kind === "arena" ? "Arena"
+    : r.kind === "live" ? "Live"
     : r.kind === "feed" ? "Lab"
     : r.kind === "feed-post" ? "Lab · " + r.date
     : r.kind === "worlds" ? "Worlds"
@@ -5665,6 +5677,7 @@ function showWorld(slug) {
 
 function route() {
   stopArenaPoll(); // leaving the in-place Arena view (incl. browser Back / popstate) kills its poll
+  if (liveChatStop) { liveChatStop(); liveChatStop = null; } // leaving /live kills the chat socket
   // The ritual stage class must not outlive the daily view: routes that don't pass
   // through leaveRoom (/feed, /worlds, stats) would otherwise keep header chrome
   // hidden. renderDailyUnlock re-adds it whenever a finished daily renders.
@@ -5678,7 +5691,7 @@ function route() {
   if (r.kind === "daily") { showDaily(r.date); return; }
   if (r.kind === "daily-stats") { showDailyStats(r.date); return; }
   if (r.kind === "daily-archive") { showDailyArchive(); return; }
-  if (r.kind === "arena") { showArenaRoute(); return; }
+  if (r.kind === "live") { showLiveRoute(); return; }
   if (r.kind === "feed") { showFeed(); return; }
   if (r.kind === "feed-post") { showFeedPost(r.date); return; }
   if (r.kind === "worlds") { showWorlds(); return; }
