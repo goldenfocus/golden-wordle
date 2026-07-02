@@ -80,6 +80,17 @@ export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
+    // Global lobby chat WebSocket. Singleton Lobby DO; the username is validated +
+    // normalized HERE (the DO trusts the `u` param), "" ⇒ anonymous read-only.
+    if (url.pathname === "/ws/live") {
+      const raw = normalizeUsername(url.searchParams.get("u") ?? "");
+      const username = isValidUsername(raw) ? raw : "";
+      const stub = env.LOBBY.get(env.LOBBY.idFromName("lobby"));
+      const upstream = new URL(req.url);
+      upstream.searchParams.set("u", username);
+      return stub.fetch(new Request(upstream.toString(), req));
+    }
+
     // Room WebSocket: /ws?room=<owner>/<slug>
     if (url.pathname === "/ws") {
       const challengeId = url.searchParams.get("challenge");
@@ -767,12 +778,26 @@ export default {
         .transform(shell);
     }
 
-    // Arena lobby (/arena): a real, refresh-survivable client route. Serve the SPA shell
-    // so a hard load / refresh / share resolves; the client router then renders the open-
-    // games view. Explicit (not left to asset fallback) to match every other client route
-    // here and to not depend on an out-of-band not_found_handling setting (see wrangler.jsonc).
+    // /arena was renamed to /live (open tables + global chat). Redirect old links/shares
+    // (302, not 301 — keep it uncached during rollout in case the name moves again).
     if (url.pathname === "/arena") {
-      return env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      return Response.redirect(url.origin + "/live", 302);
+    }
+
+    // Live (/live): open tables + global chat. Real refresh-survivable route — serve the
+    // SPA shell with lobby meta; the client router renders the two-region view.
+    if (url.pathname === "/live") {
+      const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      const title = "Live — Wordul";
+      const desc = "See who's playing, jump into an open game, and chat with the room.";
+      return new HTMLRewriter()
+        .on('[data-meta="title"]', new TextSetter(title))
+        .on('[data-meta="og:title"]', new AttrSetter("content", title))
+        .on('[data-meta="description"]', new AttrSetter("content", desc))
+        .on('[data-meta="og:description"]', new AttrSetter("content", desc))
+        .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/live`))
+        .on('[data-meta="og:url"]', new AttrSetter("content", `${url.origin}/live`))
+        .transform(shell);
     }
 
     // The Worlds theater (/worlds): SPA shell + browse meta.
