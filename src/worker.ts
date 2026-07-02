@@ -4,6 +4,7 @@ import { Challenge } from "./challenge.ts";
 import { Daily } from "./daily.ts";
 import { Science } from "./science-object.ts";
 import { Arena } from "./arena.ts";
+import { Lobby } from "./lobby.ts";
 import { makeChallengeId, wordChallengeIdFromBytes } from "./challenge-core.ts";
 import { tapeFromSolveGrid } from "./ghost-core.ts";
 import { Worduls } from "./worduls.ts";
@@ -24,7 +25,7 @@ import { buildWeeklyScienceSummary, type SciencePublicDailySummary } from "./sci
 import { buildDailyPost, buildWeeklyPost, type FeedPost } from "./feed.ts";
 import { BRAIN_NOTES } from "./brain-notes.ts";
 import { buildTuneMessages, cleanTuneOutput, TUNE_MODEL, MAX_STORY_CHARS, MAX_PROMPT_CHARS } from "./vibe-tune.ts";
-export { Room, User, WordStats, Challenge, Daily, Science, Arena, Worduls };
+export { Room, User, WordStats, Challenge, Daily, Science, Arena, Worduls, Lobby };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;

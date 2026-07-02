@@ -61,6 +61,10 @@
       {
         "name": "WORDULS",
         "class_name": "Worduls"
+      },
+      {
+        "name": "LOBBY",
+        "class_name": "Lobby"
       }
     ]
   },
@@ -144,6 +148,12 @@
       // v7 (WordStats) is the prior max; Worduls takes v8.
       "tag": "v8",
       "new_sqlite_classes": ["Worduls"]
+    },
+    {
+      // Global-chat coordinator DO. Free plan: new_sqlite_classes (same rule as every
+      // class here — new_classes fails on the free plan, err 10097).
+      "tag": "v9",
+      "new_sqlite_classes": ["Lobby"]
     }
   ],
 
