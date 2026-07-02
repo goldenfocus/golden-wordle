@@ -20,7 +20,7 @@ function makeCallbacks(over = {}) {
     onPlay: vi.fn(),
     onSolo: vi.fn(),
     onPvP: vi.fn(),
-    onArena: vi.fn(),
+    onLive: vi.fn(),
     onStats: vi.fn(),
     onShareDaily: vi.fn(),
     onWorld: vi.fn(),
@@ -41,7 +41,7 @@ describe("hub home (redesign)", () => {
     expect(document.querySelector(".daily-head .daily-kicker")).toBeTruthy();
     expect(document.getElementById("modeSolo")).toBeTruthy();
     expect(document.getElementById("modePvP")).toBeTruthy();
-    expect(document.getElementById("modeArena")).toBeTruthy(); // Arena is back, third tile
+    expect(document.getElementById("modeLive")).toBeTruthy(); // Live is the third tile
     expect(document.getElementById("dailyStats")).toBeTruthy();
     // No instructional copy, no OS emoji on this surface.
     expect(html).not.toMatch(/start typing/i);
@@ -51,8 +51,8 @@ describe("hub home (redesign)", () => {
   it("mode tiles show an icon + a small word label and each routes to its mode", () => {
     const cb = makeCallbacks();
     renderHub({}, cb);
-    // Icon + catchy micro-label: Solo · Duel · Arena.
-    const labels = { modeSolo: "Solo", modePvP: "Duel", modeArena: "Arena" };
+    // Icon + catchy micro-label: Solo · Duel · Live.
+    const labels = { modeSolo: "Solo", modePvP: "Duel", modeLive: "Live" };
     for (const [id, word] of Object.entries(labels)) {
       const tile = document.getElementById(id);
       expect(tile.getAttribute("aria-label")).toBeTruthy();
@@ -60,10 +60,10 @@ describe("hub home (redesign)", () => {
     }
     document.getElementById("modeSolo").click();
     document.getElementById("modePvP").click();
-    document.getElementById("modeArena").click();
+    document.getElementById("modeLive").click();
     expect(cb.onSolo).toHaveBeenCalledTimes(1);
     expect(cb.onPvP).toHaveBeenCalledTimes(1);
-    expect(cb.onArena).toHaveBeenCalledTimes(1);
+    expect(cb.onLive).toHaveBeenCalledTimes(1);
   });
 
   it("tap plays today's word; Stats goes to its own page (not the card)", () => {
