@@ -11,6 +11,7 @@ import {
   alarmKick,
   EMPTY_KICK_MS,
   ENSURE_ALARM_MS,
+  ALARM_STALE_MS,
   CAPACITY_WEIGHTS,
   STALE_MS,
   MAX_OPEN_MS,
@@ -360,7 +361,16 @@ describe("alarmKick — viewer-aware mint scheduling (GET /open)", () => {
     expect(alarmKick(2, now + 60_000, now)).toBe(null);
     expect(alarmKick(2, now + 100, now)).toBe(null);
   });
-  it("an overdue alarm counts as imminent — never reschedule it backwards", () => {
+  it("a just-overdue alarm counts as imminent — the runtime is about to fire it", () => {
     expect(alarmKick(0, now - 5_000, now)).toBe(null);
+  });
+  it("a stale-overdue alarm is a wedged loop — re-arm it (prod incident 2026-07-21)", () => {
+    expect(alarmKick(0, now - ALARM_STALE_MS - 1, now)).toBe(now + EMPTY_KICK_MS);
+    expect(alarmKick(0, now - 3_600_000, now)).toBe(now + EMPTY_KICK_MS);
+    expect(alarmKick(2, now - ALARM_STALE_MS - 1, now)).toBe(now + ENSURE_ALARM_MS);
+  });
+  it("overdue within the grace window is still imminent, empty or stocked", () => {
+    expect(alarmKick(0, now - ALARM_STALE_MS + 1, now)).toBe(null);
+    expect(alarmKick(2, now - ALARM_STALE_MS + 1, now)).toBe(null);
   });
 });

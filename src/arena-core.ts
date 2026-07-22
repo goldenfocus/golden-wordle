@@ -108,20 +108,26 @@ function pickCapacity(roll: number): number {
 // --- Viewer-aware mint scheduling (GET /open) ---------------------------------------
 export const EMPTY_KICK_MS = 250; // empty index + someone looking → mint almost now
 export const ENSURE_ALARM_MS = 5_000; // stocked index → just make sure the loop is alive
+export const ALARM_STALE_MS = 10_000; // overdue by more than this → the alarm is wedged, not imminent
 
 // Decide whether GET /open should (re)set the seed-loop alarm, and for when. Returns the
 // new alarm time (epoch ms) or null to leave the schedule alone. An empty index with a
 // viewer staring at it pulls the alarm forward so the first room mints in ~EMPTY_KICK_MS
 // instead of waiting out the 30–90s at-target idle drift — the "open the Arena, stare at
 // 'no open games' for a minute" failure. Mints still happen ONLY in alarm() (the
-// no-mint-from-GET review fix, defects 6 & 10, stands). An already-imminent (or overdue)
-// alarm is left to fire on its own.
+// no-mint-from-GET review fix, defects 6 & 10, stands). An already-imminent (or
+// just-overdue) alarm is left to fire on its own — but an alarm overdue by more than
+// ALARM_STALE_MS never will (the timestamp can survive a deploy/platform hiccup that
+// dropped the scheduled firing; prod incident 2026-07-21: the seed loop stayed wedged
+// for two weeks because this function refused to re-arm a dead alarm). Treat stale as
+// absent so the loop self-heals on the next viewer.
 export function alarmKick(openCount: number, currentAlarm: number | null, nowMs: number): number | null {
+  const alarm = currentAlarm !== null && nowMs - currentAlarm > ALARM_STALE_MS ? null : currentAlarm;
   if (openCount === 0) {
     const kickAt = nowMs + EMPTY_KICK_MS;
-    return currentAlarm === null || currentAlarm > kickAt ? kickAt : null;
+    return alarm === null || alarm > kickAt ? kickAt : null;
   }
-  return currentAlarm === null ? nowMs + ENSURE_ALARM_MS : null;
+  return alarm === null ? nowMs + ENSURE_ALARM_MS : null;
 }
 
 export function emptyArenaState(): ArenaState {
